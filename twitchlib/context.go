@@ -6,13 +6,15 @@ import (
 )
 
 type Context struct {
-    Sender      string
-    Channel     string
-    MsgType     string
-    Msg         string
-    IsCommand   bool
-    CommandName string
-    CommandArgs []string
+    Sender      string      // Who sent?
+    Channel     string      // In which channel?
+    MsgType     string      // PRIVMSG? JOIN? PING?
+    Msg         string      // Message
+    IsCommand   bool        // Is this a command?
+    CommandName string      // Name of command
+    CommandArgs []string    // Arguments for the command
+
+    Valid       bool        // Is valid message?
 }
 
 
@@ -20,6 +22,7 @@ func NewContext(s string, comPrefix string) *Context {
     c := new(Context)
     c.IsCommand = false
     c.CommandName = ""
+    c.Valid = true
 
     f := []func(c *Context, s string, prefix string)(bool){ checkPrivmsg, checkPing, setNone}
     done := false
@@ -65,5 +68,6 @@ func setNone(c *Context, s string, comPrefix string) bool {
     c.Channel   = "none"
     c.MsgType   = "none"
     c.Msg       = "none"
+    c.Valid     = false
     return true
 }

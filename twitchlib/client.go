@@ -5,8 +5,8 @@ import (
     "net"
     "bufio"
     "errors"
+    "strconv"
 )
-
 
 type Client struct {
     HOST        string
@@ -21,8 +21,8 @@ type Client struct {
     commandMap  map[string]*Command
 }
 
-func NewClient(pass string, nick string, prefix string) *Client {
-    var c *Client = new(Client)
+func NewClient(pass string, nick string, prefix string) (c *Client) {
+    c = new(Client)
     c.HOST  = "irc.twitch.tv"
     c.PORT  = "6667"
     c.Active = true
@@ -33,7 +33,10 @@ func NewClient(pass string, nick string, prefix string) *Client {
     c.conn, err = net.Dial("tcp", fmt.Sprintf("%s:%s", c.HOST, c.PORT))
 
     if err != nil {
-        fmt.Println("An error occured when dialing the host")
+        fmt.Printf("An error occured when dialing the host: %s\n", err)
+        return
+    } else {
+        fmt.Printf("Connected successfully to %s:%s\n", c.HOST, c.PORT)
     }
     c.reader = bufio.NewReader(c.conn)
 
@@ -41,8 +44,37 @@ func NewClient(pass string, nick string, prefix string) *Client {
     if err != nil {
         fmt.Printf("An error occured when authenticating: %s\n", err)
         c.Active = false
+    }else {
+        fmt.Printf("Authentication successful: %s\n", nick)
     }
     return c
+}
+
+func (c *Client) Log(s string) {
+    fmt.Print(s)
+}
+
+func (c *Client) Logf(format string, a ...interface{}) {
+    s := fmt.Sprintf(format+"\n", a...)
+    c.Log(s)
+}
+
+func (c *Client) LogContext(context *Context) {
+    var maxLen int          = 10
+    var maxLenStr string    = strconv.Itoa(maxLen)
+
+    sender  := context.Sender
+    channel := context.Channel
+    if len(context.Sender) > maxLen {
+        sender = context.Sender[:maxLen-3] + "..."
+    }
+    if len(context.Channel) > maxLen{
+        channel = context.Channel[:maxLen-3] + "..."
+    }
+
+    if context.Valid {
+        c.Logf("%-" + maxLenStr+ "s [ %-" + maxLenStr + "s ]: %s", sender, channel, context.Msg)
+    }
 }
 
 func (c *Client) authenticate(pass string, nick string) error {
@@ -73,10 +105,12 @@ func (c *Client) Join(channels []string) {
 
 func (c *Client) JoinChannel(channel string) {
     c.WriteString(fmt.Sprintf("JOIN #%s", channel))
+    c.Logf("Joined channel %s", channel)
 }
 
 func (c *Client) PartChannel(channel string) {
     c.WriteString(fmt.Sprintf("PART #%s", channel))
+    c.Logf("Parted channel %s", channel)
 }
 
 func (c *Client) Send(channel string, message string) {
@@ -87,20 +121,23 @@ func (c *Client) Start() {
     c.startReadLoop()
 }
 
-func (c *Client) Read() string {
-    s, err := c.reader.ReadString('\n')
-    if err != nil {
-        fmt.Printf("Error occured during reading connection, %s", err)
-    }
-    return s
+func (c *Client) Read() (s string, err error) {
+    s, err = c.reader.ReadString('\n')
+    return
 }
 
 func (c *Client) startReadLoop() {
-    fmt.Println("Starting read loop")
-    for {
-        s := c.Read()
-        context := NewContext(s, c.cmdPrefix)
-        c.HandleContext(context)
+    for ;c.Active; {
+        s, err := c.Read()
+        if err == nil {
+            context := NewContext(s, c.cmdPrefix)
+            c.LogContext(context)
+
+
+            go c.HandleContext(context)
+        }else {
+            c.Logf("Error occured when reading: %s", err)
+        }
     }
 }
 // Commands
@@ -138,9 +175,9 @@ func (c *Client) HandleContext (ctx *Context) {
 }
 
 func (c *Client) HandleInvalidCommandName (name string) {
-    fmt.Printf("Invalid command name: %s\n", name)
+    c.Logf("Invalid command name: %s", name)
 }
 
 func (c *Client) HandleInvalidCommandCall (com *Command, err error) {
-    fmt.Printf("Could not execute command %s: %s\n", com.Name, err)
+    c.Logf("Could not execute command %s: %s", com.Name, err)
 }
