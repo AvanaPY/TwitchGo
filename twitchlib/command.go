@@ -1,8 +1,6 @@
 package twitchlib
 
 import (
-    "regexp"
-    "strings"
     "strconv"
     "errors"
 )
@@ -20,38 +18,49 @@ func NewCommand(name string, msg string) *Command {
 }
 
 func (com *Command) Construct(args []string) (string, error) {
-    var out string = ""
-    wrds := strings.Fields(com.Msg)
-
-    comExpr, _ := regexp.Compile("^\\$\\{(.+?)\\}$")
-    for _, wrd := range wrds {
-        mtch := comExpr.FindStringSubmatch(wrd)
-        if mtch != nil {
-            add, err := parseFunc(mtch[1], args)
-            if err != nil{
+    var (
+        output      string  = ""
+        funcString          = ""
+        startedFunc bool    = false
+    )
+    // Loop over all characters and see if the pattern ${...} is found
+    // If we find a pattern evaluate it as a func string, otherwise just append the character to the output
+    //
+    // Result: Replace all ${...} patterns with function outputs
+    for _, char := range com.Msg {
+        if char == '$'{
+            startedFunc = true
+        } else if char == '{'{
+            continue
+        } else if char == '}' {
+            startedFunc = false
+            o, err := EvaluateFuncString(funcString, args)
+            if err != nil {
                 return "", err
             }
-            out += add + " "
-        }else {
-            out += wrd + " "
+            output += o
+            funcString = ""
+        } else if startedFunc {
+            funcString += string(char)
+        } else {
+            output += string(char)
         }
     }
-    return out, nil
+    return output, nil
 }
 
-func parseFunc(in string, args []string) (string, error) {
-    var val string  = ""
-    var err error   = nil
+func EvaluateFuncString(in string, args []string) (string, error) {
+    var (
+        val string  = ""
+        err error   = nil
+    )
 
-    funcs := []func(in string, args []string)(string, error) {isInt}
     // Loop through all functions and stop if a non-error case occurs
+    funcs := []func(in string, args []string)(string, error) {isInt}
     for i:=0; i < len(funcs) && err == nil; i++{
         val, err = funcs[i](in, args)
     }
-    if err != nil {
-        return val, err
-    }
-    return val, nil
+    return val, err
 }
 
 func isInt(in string, args []string) (string, error) {

@@ -9,25 +9,28 @@ import (
 )
 
 type Client struct {
-    HOST        string
-    PORT        string
+    HOST            string
+    PORT            string
 
-    conn        net.Conn
-    reader      *bufio.Reader
+    conn            net.Conn
+    reader          *bufio.Reader
 
-    Active      bool
+    Active          bool
 
-    cmdPrefix   string
-    commandMap  map[string]*Command
+    CommandPrefix   string
+    commandMap      map[string]*Command
+
+    channels        map[string]*Channel
 }
 
 func NewClient(pass string, nick string, prefix string) (c *Client) {
     c = new(Client)
-    c.HOST  = "irc.twitch.tv"
-    c.PORT  = "6667"
-    c.Active = true
-    c.commandMap = make(map[string]*Command)
-    c.cmdPrefix = prefix
+    c.HOST          = "irc.twitch.tv"
+    c.PORT          = "6667"
+    c.Active        = true
+    c.commandMap    = make(map[string]*Command)
+    c.CommandPrefix = prefix
+    c.channels      = make(map[string]*Channel)
 
     var err error
     c.conn, err = net.Dial("tcp", fmt.Sprintf("%s:%s", c.HOST, c.PORT))
@@ -50,12 +53,18 @@ func NewClient(pass string, nick string, prefix string) (c *Client) {
     return c
 }
 
+// LOGGING
+
 func (c *Client) Log(s string) {
-    fmt.Print(s)
+    if s[len(s)-1] == '\n' {
+        fmt.Print(s)
+    } else {
+        fmt.Println(s)
+    }
 }
 
 func (c *Client) Logf(format string, a ...interface{}) {
-    s := fmt.Sprintf(format+"\n", a...)
+    s := fmt.Sprintf(format, a...)
     c.Log(s)
 }
 
@@ -63,25 +72,32 @@ func (c *Client) LogContext(context *Context) {
     var maxLen int          = 10
     var maxLenStr string    = strconv.Itoa(maxLen)
 
-    sender  := context.Sender
-    channel := context.Channel
-    if len(context.Sender) > maxLen {
-        sender = context.Sender[:maxLen-3] + "..."
-    }
-    if len(context.Channel) > maxLen{
-        channel = context.Channel[:maxLen-3] + "..."
-    }
+    if context.MsgType == PrivMsg {
+        sender  := LimitStringLength(context.Sender      , maxLen, "...")
+        channel := LimitStringLength(context.Channel.Name, maxLen, "...")
 
-    if context.Valid {
-        c.Logf("%-" + maxLenStr+ "s [ %-" + maxLenStr + "s ]: %s", sender, channel, context.Msg)
+        if context.Valid {
+            c.Logf("%-" + maxLenStr+ "s [ %-" + maxLenStr + "s ]: %s", sender, channel, context.Msg)
+        }
     }
 }
+
+// TWITCH FUNCS
 
 func (c *Client) authenticate(pass string, nick string) error {
     var auth string = fmt.Sprintf("PASS %s\r\nNICK %s\r\n", pass, nick)
     _, err := c.WriteBytes([]byte(auth))
     return err
 }
+
+func (c *Client) Channel(name string) (*Channel) {
+    if val, ok := c.channels[name]; ok {
+        return val
+    }
+    return nil
+}
+
+// WRITERS
 
 func (c *Client) WriteBytes(bytes []byte) (int, error) {
     if c.conn == nil{
@@ -97,6 +113,8 @@ func (c *Client) WriteString(s string) (int, error){
     return wb, err
 }
 
+// COMMANDS
+
 func (c *Client) Join(channels []string) {
     for _, channels := range channels {
         c.JoinChannel(channels)
@@ -104,43 +122,46 @@ func (c *Client) Join(channels []string) {
 }
 
 func (c *Client) JoinChannel(channel string) {
-    c.WriteString(fmt.Sprintf("JOIN #%s", channel))
-    c.Logf("Joined channel %s", channel)
+    ch := NewChannel(channel, c)
+    c.channels[ch.Name] = ch
+    c.WriteString(fmt.Sprintf("JOIN #%s", ch.Name))
 }
 
 func (c *Client) PartChannel(channel string) {
     c.WriteString(fmt.Sprintf("PART #%s", channel))
-    c.Logf("Parted channel %s", channel)
 }
 
 func (c *Client) Send(channel string, message string) {
     c.WriteString(fmt.Sprintf("PRIVMSG #%s :%s", channel, message))
 }
 
+// GENERALS
+
 func (c *Client) Start() {
+    for key, val := range c.channels {
+        fmt.Printf("%s: %s\n", key, val.Name)
+    }
     c.startReadLoop()
 }
 
-func (c *Client) Read() (s string, err error) {
-    s, err = c.reader.ReadString('\n')
-    return
+func (c *Client) Read() (string, error) {
+    return c.reader.ReadString('\n')
 }
 
 func (c *Client) startReadLoop() {
     for ;c.Active; {
         s, err := c.Read()
         if err == nil {
-            context := NewContext(s, c.cmdPrefix)
-            c.LogContext(context)
-
-
+            context := NewContext(s, c)
             go c.HandleContext(context)
+            c.LogContext(context)
         }else {
             c.Logf("Error occured when reading: %s", err)
         }
     }
 }
-// Commands
+
+// User Commands
 
 func (c *Client) CreateCommand(name string, msg string) {
     com := NewCommand(name, msg)
@@ -160,18 +181,22 @@ func (c *Client) CallCommand(name string, channel string, args []string) {
     }
 }
 
-
 // Handlers
 func (c *Client) HandleContext (ctx *Context) {
-    if ctx.MsgType == "PING" {
-        fmt.Printf("Responded to PING\n")
-        c.WriteString("PONG :tmi.twitch.tv")
-    } else if ctx.MsgType == "PRIVMSG" {
+    if ctx.IsPing {
+        c.HandlePing(ctx.ORG)
+    } else if ctx.MsgType == PrivMsg {
         if ctx.IsCommand {
-            c.CallCommand(ctx.CommandName, ctx.Channel, ctx.CommandArgs)
+            c.CallCommand(ctx.CommandName, ctx.Channel.Name, ctx.CommandArgs)
         }
     }
     return
+}
+
+func (c *Client) HandlePing (ping string) {
+    var resp string = "PONG :tmi.twitch.tv"
+    c.Logf("Responded to %q with %q", ping, resp)
+    c.WriteString(resp)
 }
 
 func (c *Client) HandleInvalidCommandName (name string) {
