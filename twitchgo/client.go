@@ -177,13 +177,20 @@ func (c *Client) startReadLoop() {
 
 // User Commands
 
-func (c *Client) CreateCommand(name string, msg string) {
-    com := NewCommand(name, msg)
-    c.commandMap[name] = com
+func (c *Client) CreateCommand(name string, msg string, channel... string) {
+    if len(channel) > 0 {
+        if ch, ok := c.channels[channel[0]]; ok {
+            ch.CreateCommand(name, msg)
+        }
+    } else {
+        com := NewCommand(name, msg)
+        c.commandMap[name] = com
+    }
 }
 
 func (c *Client) CallCommand(name string, channel string, args []string) {
-    if com, ok := c.commandMap[name]; ok {
+    com := c.getCommand(name, channel)
+    if com != nil {
         resp, err := com.Construct(args)
         if err == nil {
             c.Send(channel, resp)
@@ -193,6 +200,21 @@ func (c *Client) CallCommand(name string, channel string, args []string) {
     } else {
         c.HandleInvalidCommandName(name)
     }
+}
+
+func (c *Client) getCommand(name string, channel string) *Command {
+
+    // Check if command is a channel-specific command
+    if ch, ok := c.channels[channel]; ok {
+        if com, comOk := ch.Command(name); comOk {
+            return com
+        }
+    }
+    // If it's not a channel command, check if it's a global command
+    if com, comOk := c.commandMap[name]; comOk {
+        return com
+    }
+    return nil
 }
 
 // Handlers
