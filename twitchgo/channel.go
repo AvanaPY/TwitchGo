@@ -19,7 +19,7 @@ func (ch *Channel) AddCommand(com *Command) {
 	ch.commands[com.Name] = com
 }
 
-func (ch *Channel) Command(name string) (*Command, bool) {
+func (ch *Channel) GetCommand(name string) (*Command, bool) {
 	if com, ok := ch.commands[name]; ok {
 		return com, ok
 	}

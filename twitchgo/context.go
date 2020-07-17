@@ -46,6 +46,13 @@ func NewContext(s string, cl *Client) *Context {
 	return c
 }
 
+func (ctx *Context) Argument(index int) (string, bool) {
+	if index < len(ctx.CommandArgs) {
+		return ctx.CommandArgs[index], true
+	}
+	return "", false
+}
+
 func checkPrivmsg(c *Context, s string, cl *Client) bool {
 	expr, _ := regexp.Compile(":(.+?)!.+ (.+?) #(.+?) :(.+)")
 	data := expr.FindStringSubmatch(s)

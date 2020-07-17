@@ -178,7 +178,7 @@ func (c *Client) startReadLoop() {
 
 // User Commands
 
-func (c *Client) CreateCommandFunction(name string, f func(args []string) (string, error), channel ...string) {
+func (c *Client) CreateCommandFunction(name string, f func(ctx *Context) (string, error), channel ...string) {
 	com := NewCommand(name, f)
 	if len(channel) > 0 {
 		if ch, ok := c.channels[channel[0]]; ok {
@@ -189,17 +189,24 @@ func (c *Client) CreateCommandFunction(name string, f func(args []string) (strin
 	}
 }
 
-func (c *Client) CallCommand(name string, channel string, args []string) {
-	com := c.getCommand(name, channel)
+func (c *Client) CreateCommandString(name string, msg string, channel ...string) {
+	f := func(ctx *Context) (string, error) {
+		return msg, nil
+	}
+	c.CreateCommandFunction(name, f, channel...)
+}
+
+func (c *Client) CallCommand(ctx *Context) {
+	com := c.getCommand(ctx.CommandName, ctx.Channel.Name)
 	if com != nil {
-		resp, err := com.Construct(args)
+		resp, err := com.Construct(ctx)
 		if err == nil {
-			c.Send(channel, resp)
+			c.Send(ctx.Channel.Name, resp)
 		} else {
-			c.HandleInvalidCommandCall(com, err)
+			c.HandleInvalidCommandCall(ctx, err)
 		}
 	} else {
-		c.HandleInvalidCommandName(name)
+		c.HandleInvalidCommandName(ctx)
 	}
 }
 
@@ -207,7 +214,7 @@ func (c *Client) getCommand(name string, channel string) *Command {
 
 	// Check if command is a channel-specific command
 	if ch, ok := c.channels[channel]; ok {
-		if com, comOk := ch.Command(name); comOk {
+		if com, comOk := ch.GetCommand(name); comOk {
 			return com
 		}
 	}
@@ -224,7 +231,7 @@ func (c *Client) HandleContext(ctx *Context) {
 		c.HandlePing(ctx.ORG)
 	} else if ctx.MsgType == PrivMsg {
 		if ctx.IsCommand {
-			c.CallCommand(ctx.CommandName, ctx.Channel.Name, ctx.CommandArgs)
+			c.CallCommand(ctx)
 		}
 	}
 	return
@@ -236,10 +243,10 @@ func (c *Client) HandlePing(ping string) {
 	c.WriteString(resp)
 }
 
-func (c *Client) HandleInvalidCommandName(name string) {
-	c.Logf("Invalid command name: %s", name)
+func (c *Client) HandleInvalidCommandName(ctx *Context) {
+	c.Logf("Invalid command name: %s", ctx.CommandName)
 }
 
-func (c *Client) HandleInvalidCommandCall(com *Command, err error) {
-	c.Logf("Could not execute command %s: %s", com.Name, err)
+func (c *Client) HandleInvalidCommandCall(ctx *Context, err error) {
+	c.Logf("Could not execute command %s: %s", ctx.CommandName, err)
 }
