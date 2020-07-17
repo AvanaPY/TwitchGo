@@ -1,4 +1,4 @@
-package twitchlib
+package twitchgo
 
 import (
     "regexp"

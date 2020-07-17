@@ -1,4 +1,4 @@
-package twitchlib
+package twitchgo
 
 type Channel struct {
     client      *Client      // So we can interact with the client

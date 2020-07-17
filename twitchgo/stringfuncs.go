@@ -1,4 +1,4 @@
-package twitchlib
+package twitchgo
 
 func LimitStringLength(s string, length int, fill string) string {
     if len(s) > length {

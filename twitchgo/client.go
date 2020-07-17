@@ -1,4 +1,4 @@
-package twitchlib
+package twitchgo
 
 import (
     "fmt"
@@ -6,6 +6,7 @@ import (
     "bufio"
     "errors"
     "strconv"
+    "strings"
 )
 
 type Client struct {
@@ -38,20 +39,35 @@ func NewClient(pass string, nick string, prefix string) (c *Client) {
 
     if err != nil {
         fmt.Printf("An error occured when dialing the host: %s\n", err)
+        c.Active = false
         return
-    } else {
-        fmt.Printf("Connected successfully to %s:%s\n", c.HOST, c.PORT)
     }
     c.reader = bufio.NewReader(c.conn)
 
     err = c.authenticate(pass, nick)
     if err != nil {
-        fmt.Printf("An error occured when authenticating: %s\n", err)
+        fmt.Println(err)
         c.Active = false
-    }else {
-        fmt.Printf("Authentication successful: %s\n", nick)
     }
     return c
+}
+
+func (c *Client) authenticate(pass string, nick string) error {
+    var auth string = fmt.Sprintf("PASS %s\r\nNICK %s\r\n", pass, nick)
+    _, err := c.WriteBytes([]byte(auth))
+    resp, _ := c.Read()
+    resp = strings.Split(resp, ":")[2]
+
+    success := resp == "Welcome, GLHF!\r\n"
+    if success{
+        // Wait for authentication messages
+        for i:=0;i<6;i++ {
+            resp, _ = c.Read()
+        }
+        return err
+    }
+    fmt.Println(resp)
+    return errors.New("Authentication failed, invalid Oauth.")
 }
 
 // LOGGING
@@ -80,16 +96,12 @@ func (c *Client) LogContext(context *Context) {
         if context.Valid {
             c.Logf("%-" + maxLenStr+ "s [ %-" + maxLenStr + "s ]: %s", sender, channel, context.Msg)
         }
+    } else {
+        c.Logf(context.ORG)
     }
 }
 
 // TWITCH FUNCS
-
-func (c *Client) authenticate(pass string, nick string) error {
-    var auth string = fmt.Sprintf("PASS %s\r\nNICK %s\r\n", pass, nick)
-    _, err := c.WriteBytes([]byte(auth))
-    return err
-}
 
 func (c *Client) Channel(name string) (*Channel) {
     if val, ok := c.channels[name]; ok {
@@ -126,6 +138,8 @@ func (c *Client) JoinChannel(channel string) {
     ch := NewChannel(channel, c)
     c.channels[ch.Name] = ch
     c.WriteString(fmt.Sprintf("JOIN #%s", ch.Name))
+    c.Logf("Joined %s", channel)
+    for i:=0;i<3;i++{c.Read()}
 }
 
 func (c *Client) PartChannel(channel string) {
@@ -138,15 +152,14 @@ func (c *Client) Send(channel string, message string) {
 
 // GENERALS
 
-func (c *Client) Start() {
-    for key, val := range c.channels {
-        fmt.Printf("%s: %s\n", key, val.Name)
-    }
-    c.startReadLoop()
-}
 
 func (c *Client) Read() (string, error) {
-    return c.reader.ReadString('\n')
+    s, err := c.reader.ReadString('\n')
+    return s, err
+}
+
+func (c *Client) Start() {
+    c.startReadLoop()
 }
 
 func (c *Client) startReadLoop() {
