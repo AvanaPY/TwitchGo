@@ -24,13 +24,14 @@ type Client struct {
 }
 
 func NewClient(pass string, nick string, prefix string) (c *Client) {
-    c = new(Client)
-    c.HOST          = "irc.twitch.tv"
-    c.PORT          = "6667"
-    c.Active        = true
-    c.commandMap    = make(map[string]*Command)
-    c.CommandPrefix = prefix
-    c.channels      = make(map[string]*Channel)
+    c = &Client {
+        HOST:           "irc.twitch.tv",
+        PORT:           "6667",
+        Active:         true,
+        commandMap:     make(map[string]*Command),
+        CommandPrefix:  prefix,
+        channels:       make(map[string]*Channel),
+    }
 
     var err error
     c.conn, err = net.Dial("tcp", fmt.Sprintf("%s:%s", c.HOST, c.PORT))

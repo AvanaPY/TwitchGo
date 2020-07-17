@@ -7,11 +7,11 @@ type Channel struct {
     commands    map[string]*Command     // Channel-specific commands
 }
 
-
 func NewChannel(name string, cl *Client) *Channel {
-    c := new(Channel)
-    c.Name = name
-    c.client = cl
-
+    c := &Channel {
+        Name: name,
+        client: cl,
+        commands: make(map[string]*Command),
+    }
     return c
 }

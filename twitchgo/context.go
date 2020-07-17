@@ -72,4 +72,3 @@ func checkPing(c *Context, s string, cl *Client) bool {
     c.IsPing = mtch != nil
     return c.IsPing
 }
-

@@ -8,10 +8,10 @@ run: compile
 compile: gobin ${BIN}
 	@GOOP=linux GOARCH=386
 	@go install
-	@mv ${BIN}/TwitchLib ${BIN}/${TAR}
+	@mv ${BIN}/TwitchGo ${BIN}/${TAR}
 
 gobin:
 	@go env -w GOBIN="${DIR}/${BIN}"
-	
+
 ${BIN}:
 	@mkdir $@

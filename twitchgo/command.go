@@ -11,9 +11,10 @@ type Command struct {
 }
 
 func NewCommand(name string, msg string) *Command {
-    com := new(Command)
-    com.Name = name
-    com.Msg = msg
+    com := &Command{
+        Name: name,
+        Msg:  msg,
+    }
     return com
 }
 
